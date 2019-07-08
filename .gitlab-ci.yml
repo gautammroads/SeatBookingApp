@@ -1,0 +1,72 @@
+image: vf-docker:latest
+
+variables:
+  SSL_CERT_DIR: /etc/ssl/certs
+  DOCKER_DRIVER: overlay
+
+stages:
+  - build
+  - artifactdeploy
+  - package
+
+maven-build-dev:
+  image: maven:3.5.0-jdk-8
+  stage: build
+  script: 
+    - "/scripts/maven_auto.sh"
+    - "/scripts/test_coverage_java.sh"
+    - "/scripts/pmd_java.sh"
+  artifacts:
+    paths:
+      - target/site/jacoco/
+      - target/*.jar
+      - pmd.txt
+    expire_in: 1 days
+  only:
+    - build
+
+maven-build-release:
+  image: maven:3.5.0-jdk-8
+  stage: artifactdeploy
+  script: 
+    - "/scripts/version_checks_maven.sh"
+    - "/scripts/maven_build.sh"
+    - "/scripts/test_coverage_java.sh"
+    - "/scripts/pmd_java.sh"
+    - "/scripts/maven_deploy.sh"
+    - "/scripts/tag_maven.sh"
+  artifacts:
+    paths:
+      - target/site/jacoco/
+      - target/*.jar
+      - pmd.txt
+    expire_in: 3 days
+  only:
+    - master
+
+docker-build-snapshot:
+  stage: package
+  script:
+    - /scripts/docker_snapshot_only.sh
+  only:
+    - build
+
+docker-build-release:
+  stage: package
+  script:
+    - /scripts/docker.sh
+  only:
+    - master
+
+pages:
+  stage: package
+  dependencies: 
+    - maven-build-release
+  script:
+    - mv target/site/jacoco/ public/
+  artifacts:
+    paths: 
+      - public
+    expire_in: 30 days
+  only:
+    - master
